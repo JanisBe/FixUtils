@@ -26,6 +26,11 @@ intellijPlatform {
         name = "FIX Message Parser"
         version = project.version.toString()
         changeNotes = "Initial release"
+
+        ideaVersion {
+            sinceBuild = "231"
+            untilBuild = "999.*"
+        }
     }
 
     publishing {
