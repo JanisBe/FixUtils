@@ -26,8 +26,8 @@ import java.util.List;
 import java.util.Map;
 
 public class FixParserPanel extends JPanel {
-    private final Project project;
-    private final FixDictionaryService dictionaryService;
+    private final transient Project project;
+    private final transient FixDictionaryService dictionaryService;
 
     // UI Components
     private JTextArea messageInput;
@@ -38,9 +38,15 @@ public class FixParserPanel extends JPanel {
     private JRadioButton customRadio;
     private JTextField customSeparatorField;
     private JComboBox<String> dictionaryCombo;
-    private JBTable resultTable;
+    
     private FixTableModel tableModel;
-    private final Timer parseTimer;
+    private final transient Timer parseTimer;
+    private boolean isUpdatingUi = false;
+
+    private static final String SOH = "\u0001";
+    private static final String PIPE = "|";
+    private static final String CARET = "^";
+    private static final String TILDE = "~";
 
     public FixParserPanel(Project project) {
         super(new BorderLayout());
@@ -55,6 +61,7 @@ public class FixParserPanel extends JPanel {
     }
 
     private void initUi() {
+        JBTable resultTable;
         // --- NORTH: Input and Controls ---
         JPanel topPanel = new JPanel(new BorderLayout());
 
@@ -269,19 +276,29 @@ public class FixParserPanel extends JPanel {
     }
 
     public void performParse() {
+        if (isUpdatingUi) return;
         if (parseTimer.isRunning()) {
             parseTimer.stop();
         }
 
         String message = messageInput.getText();
-        String delimiter = getSelectedDelimiter();
-        String dictName = (String) dictionaryCombo.getSelectedItem();
-
-        if (message == null || message.trim().isEmpty() || delimiter == null || delimiter.isEmpty()) {
+        if (message == null || message.trim().isEmpty()) {
             // Clear table if input is empty
             ApplicationManager.getApplication().invokeLater(() -> {
                 tableModel.setData(List.of(), Map.of());
             });
+            return;
+        }
+
+        // Try auto-detection if it's a FIX message
+        if (message.startsWith("8=")) {
+            autoDetectSettings(message);
+        }
+
+        String delimiter = getSelectedDelimiter();
+        String dictName = (String) dictionaryCombo.getSelectedItem();
+
+        if (delimiter == null || delimiter.isEmpty()) {
             return;
         }
 
@@ -300,6 +317,7 @@ public class FixParserPanel extends JPanel {
     }
 
     private void triggerAutoParse() {
+        if (isUpdatingUi) return;
         if (parseTimer.isRunning()) {
             parseTimer.restart();
         } else {
@@ -307,12 +325,85 @@ public class FixParserPanel extends JPanel {
         }
     }
 
+    private void autoDetectSettings(String message) {
+        String detectedDelimiter = identifyDelimiter(message);
+        if (detectedDelimiter == null) return;
+
+        String fixVersion = extractFixVersion(message, detectedDelimiter);
+
+        // Update UI on EDT
+        isUpdatingUi = true;
+        try {
+            updateDelimiterSelection(detectedDelimiter);
+            if (fixVersion != null) {
+                String dictToSelect = mapFixVersionToDict(fixVersion);
+                if (dictToSelect != null) {
+                    dictionaryCombo.setSelectedItem(dictToSelect);
+                }
+            }
+        } finally {
+            isUpdatingUi = false;
+        }
+    }
+
+    private String identifyDelimiter(String message) {
+        // Find delimiter: check what's between BeginString and BodyLength
+        // Standard pattern: 8=FIX.X.Y<DELIM>9=
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^8=FIX\\.[0-9a-zA-Z.]+(\\D)9=");
+        java.util.regex.Matcher matcher = pattern.matcher(message);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        // Fallback: check most common delimiters
+        if (message.contains(SOH)) return SOH;
+        if (message.contains(PIPE)) return PIPE;
+        if (message.contains(CARET)) return CARET;
+        if (message.contains(TILDE)) return TILDE;
+
+        return null;
+    }
+
+    private String extractFixVersion(String message, String delimiter) {
+        int eqPos = message.indexOf('=');
+        int delimPos = message.indexOf(delimiter, eqPos);
+        if (delimPos > eqPos) {
+            return message.substring(eqPos + 1, delimPos).trim();
+        }
+        return null;
+    }
+
+    private void updateDelimiterSelection(String delimiter) {
+        if (PIPE.equals(delimiter)) pipeRadio.setSelected(true);
+        else if (CARET.equals(delimiter)) caretRadio.setSelected(true);
+        else if (TILDE.equals(delimiter)) tildeRadio.setSelected(true);
+        else if (SOH.equals(delimiter)) sohRadio.setSelected(true);
+        else {
+            customRadio.setSelected(true);
+            customSeparatorField.setText(delimiter);
+        }
+    }
+
+    private String mapFixVersionToDict(String version) {
+        // Basic mapping logic
+        if (version.startsWith("FIX.4.0")) return "FIX40";
+        if (version.startsWith("FIX.4.1")) return "FIX41";
+        if (version.startsWith("FIX.4.2")) return "FIX42";
+        if (version.startsWith("FIX.4.3")) return "FIX43";
+        if (version.startsWith("FIX.4.4")) return "FIX44";
+        if (version.startsWith("FIX.5.0SP1")) return "FIX50SP1";
+        if (version.startsWith("FIX.5.0SP2")) return "FIX50SP2";
+        if (version.startsWith("FIX.5.0")) return "FIX50";
+        if (version.startsWith("FIXT.1.1")) return "FIXT11";
+        return null;
+    }
+
     private String getSelectedDelimiter() {
-        if (pipeRadio.isSelected()) return "|";
-        if (caretRadio.isSelected()) return "^";
-        if (tildeRadio.isSelected()) return "~";
-        if (sohRadio.isSelected()) return "\u0001";
+        if (pipeRadio.isSelected()) return PIPE;
+        if (caretRadio.isSelected()) return CARET;
+        if (tildeRadio.isSelected()) return TILDE;
+        if (sohRadio.isSelected()) return SOH;
         if (customRadio.isSelected()) return customSeparatorField.getText();
-        return "|"; // fallback
+        return PIPE; // fallback
     }
 }

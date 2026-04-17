@@ -18,6 +18,9 @@ dependencies {
         intellijIdeaCommunity("2023.1")
         bundledPlugin("com.intellij.java")
     }
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.9.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 intellijPlatform {
@@ -29,7 +32,6 @@ intellijPlatform {
 
         ideaVersion {
             sinceBuild = "231"
-            untilBuild = "999.*"
         }
     }
 
@@ -53,4 +55,8 @@ tasks.processResources {
     from("Dictionaries") {
         into("Dictionaries")
     }
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
