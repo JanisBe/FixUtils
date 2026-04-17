@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.fixutils"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -32,6 +32,7 @@ intellijPlatform {
 
         ideaVersion {
             sinceBuild = "231"
+            untilBuild = provider { null }
         }
     }
 
