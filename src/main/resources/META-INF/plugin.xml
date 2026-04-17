@@ -1,0 +1,28 @@
+<idea-plugin>
+  <id>com.fixutils.fix-parser</id>
+  <name>FIX Message Parser</name>
+  <vendor>FixUtils</vendor>
+  <description>Parses raw FIX protocol messages into an annotated table.</description>
+
+  <!-- Product and plugin compatibility requirements.
+       Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
+  <depends>com.intellij.modules.platform</depends>
+
+  <!-- Extension points defined by the plugin.
+       Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow
+        id="FIX Parser"
+        anchor="bottom"
+        factoryClass="com.fixutils.ui.FixParserToolWindowFactory"/>
+  </extensions>
+
+  <actions>
+    <action id="FixUtils.OpenParser"
+            class="com.fixutils.actions.OpenFixParserAction"
+            text="Open FIX Parser"
+            description="Open the FIX Message Parser tool window">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+  </actions>
+</idea-plugin>
