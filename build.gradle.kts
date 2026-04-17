@@ -8,7 +8,9 @@ version = "1.0.0"
 
 repositories {
     mavenCentral()
-    intellijPlatform { defaultRepositories() }
+    intellijPlatform {
+        defaultRepositories()
+    }
 }
 
 dependencies {
@@ -23,6 +25,17 @@ intellijPlatform {
         id = "com.fixutils.fix-parser"
         name = "FIX Message Parser"
         version = project.version.toString()
+        changeNotes = "Initial release"
+    }
+
+    publishing {
+        token = providers.environmentVariable("JETBRAINS_TOKEN")
+    }
+
+    pluginVerification {
+        ides {
+            recommended()
+        }
     }
 }
 
