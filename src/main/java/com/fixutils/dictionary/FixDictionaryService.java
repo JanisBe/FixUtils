@@ -51,7 +51,7 @@ public final class FixDictionaryService {
     public boolean loadExternal(File file) {
         try {
             Map<Integer, FixFieldDescriptor> fields = FixDictionaryLoader.load(file);
-            loadedDictionaries.put(file.getName(), fields);
+            loadedDictionaries.put(file.getName() + " (external)", fields);
             return true;
         } catch (Exception e) {
             LOG.error("Failed to load external dictionary: " + file.getAbsolutePath(), e);

@@ -38,10 +38,13 @@ public class FixParserPanel extends JPanel {
     private JRadioButton customRadio;
     private JTextField customSeparatorField;
     private JComboBox<String> dictionaryCombo;
+    private JLabel dictionaryStatusLabel;
     
     private FixTableModel tableModel;
     private final transient Timer parseTimer;
     private boolean isUpdatingUi = false;
+    private String lastDetectedVersion = null;
+    private String lastDetectedDelimiter = null;
 
     private static final String SOH = "\u0001";
     private static final String PIPE = "|";
@@ -173,9 +176,15 @@ public class FixParserPanel extends JPanel {
         JPanel dictPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         dictPanel.add(new JLabel("Dictionary: "));
 
+        dictionaryStatusLabel = new JLabel("");
+        dictionaryStatusLabel.setFont(dictionaryStatusLabel.getFont().deriveFont(Font.BOLD));
+
         dictionaryCombo = new ComboBox<>();
         refreshDictionaryCombo();
-        dictionaryCombo.addActionListener(e -> performParse());
+        dictionaryCombo.addActionListener(e -> {
+            updateDictionaryStatus();
+            performParse();
+        });
 
         // Select FIX41 by default if it exists, else index 0
         dictionaryCombo.setSelectedItem("FIX41");
@@ -190,6 +199,8 @@ public class FixParserPanel extends JPanel {
         dictPanel.add(browseButton);
         dictPanel.add(Box.createHorizontalStrut(20));
         dictPanel.add(parseButton);
+        dictPanel.add(Box.createHorizontalStrut(10));
+        dictPanel.add(dictionaryStatusLabel);
 
         controlsPanel.add(dictPanel);
 
@@ -198,6 +209,7 @@ public class FixParserPanel extends JPanel {
 
         // --- CENTER: Result Table ---
         tableModel = new FixTableModel();
+        tableModel.setValueUpdateListener(this::rebuildMessageFromTable);
         resultTable = new JBTable(tableModel);
 
         // Setup table sorting
@@ -242,6 +254,18 @@ public class FixParserPanel extends JPanel {
         add(new JBScrollPane(resultTable), BorderLayout.CENTER);
     }
 
+    private void updateDictionaryStatus() {
+        if (dictionaryStatusLabel == null) return;
+        String selected = (String) dictionaryCombo.getSelectedItem();
+        if (selected != null && selected.endsWith(" (external)")) {
+            dictionaryStatusLabel.setText("Custom dictionary active");
+            dictionaryStatusLabel.setToolTipText("Using external dictionary definition");
+        } else {
+            dictionaryStatusLabel.setText("");
+            dictionaryStatusLabel.setToolTipText(null);
+        }
+    }
+
     private void refreshDictionaryCombo() {
         String selected = (String) dictionaryCombo.getSelectedItem();
         dictionaryCombo.removeAllItems();
@@ -254,6 +278,7 @@ public class FixParserPanel extends JPanel {
         } else if (!dicts.isEmpty()) {
             dictionaryCombo.setSelectedIndex(0);
         }
+        updateDictionaryStatus();
     }
 
     private void browseExternalDictionary() {
@@ -265,13 +290,34 @@ public class FixParserPanel extends JPanel {
 
         if (files.length > 0) {
             File file = new File(files[0].getPath());
+            String displayName = file.getName() + " (external)";
             if (dictionaryService.loadExternal(file)) {
                 refreshDictionaryCombo();
-                dictionaryCombo.setSelectedItem(file.getName());
+                dictionaryCombo.setSelectedItem(displayName);
                 performParse();
             } else {
                 JOptionPane.showMessageDialog(this, "Failed to load dictionary from " + file.getName(), "Error", JOptionPane.ERROR_MESSAGE);
             }
+        }
+    }
+
+    private void rebuildMessageFromTable() {
+        List<TagValuePair> pairs = tableModel.getData();
+        String delimiter = getSelectedDelimiter();
+        if (pairs.isEmpty() || delimiter == null || delimiter.isEmpty()) {
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (TagValuePair pair : pairs) {
+            sb.append(pair.tag()).append("=").append(pair.value()).append(delimiter);
+        }
+
+        isUpdatingUi = true;
+        try {
+            messageInput.setText(sb.toString());
+        } finally {
+            isUpdatingUi = false;
         }
     }
 
@@ -283,6 +329,8 @@ public class FixParserPanel extends JPanel {
 
         String message = messageInput.getText();
         if (message == null || message.trim().isEmpty()) {
+            lastDetectedVersion = null;
+            lastDetectedDelimiter = null;
             // Clear table if input is empty
             ApplicationManager.getApplication().invokeLater(() -> {
                 tableModel.setData(List.of(), Map.of());
@@ -334,12 +382,16 @@ public class FixParserPanel extends JPanel {
         // Update UI on EDT
         isUpdatingUi = true;
         try {
-            updateDelimiterSelection(detectedDelimiter);
-            if (fixVersion != null) {
+            if (!detectedDelimiter.equals(lastDetectedDelimiter)) {
+                updateDelimiterSelection(detectedDelimiter);
+                lastDetectedDelimiter = detectedDelimiter;
+            }
+            if (fixVersion != null && !fixVersion.equals(lastDetectedVersion)) {
                 String dictToSelect = mapFixVersionToDict(fixVersion);
                 if (dictToSelect != null) {
                     dictionaryCombo.setSelectedItem(dictToSelect);
                 }
+                lastDetectedVersion = fixVersion;
             }
         } finally {
             isUpdatingUi = false;
