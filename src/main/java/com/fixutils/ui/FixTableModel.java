@@ -13,14 +13,14 @@ import java.util.Map;
 public class FixTableModel extends AbstractTableModel {
     private static final String[] COLUMNS = {"Tag", "Field Name", "Type", "Value", "Enum Description"};
 
-    private List<TagValuePair> data = new ArrayList<>();
-    private Map<Integer, FixFieldDescriptor> currentDictionary = Collections.emptyMap();
+    private transient List<TagValuePair> data = new ArrayList<>();
+    private transient Map<Integer, FixFieldDescriptor> currentDictionary = Collections.emptyMap();
 
     public interface ValueUpdateListener {
         void onValueUpdated();
     }
 
-    private ValueUpdateListener updateListener;
+    private transient ValueUpdateListener updateListener;
 
     public void setValueUpdateListener(ValueUpdateListener listener) {
         this.updateListener = listener;
