@@ -10,6 +10,7 @@ import com.intellij.openapi.fileChooser.FileChooserFactory;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
 
@@ -226,12 +227,17 @@ public class FixParserPanel extends JPanel {
 
         // Custom renderer for row styling
         resultTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+            private final Color errorBg = new JBColor(new Color(255, 220, 220), new Color(90, 50, 50));
+            private final Color errorFg = new JBColor(new Color(180, 0, 0), new Color(255, 120, 120));
+
             @Override
             public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
                 Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
                 int modelRow = table.convertRowIndexToModel(row);
-                if (tableModel.isUnknownTag(modelRow)) {
+                boolean isUnknown = tableModel.isUnknownTag(modelRow);
+
+                if (isUnknown) {
                     c.setFont(c.getFont().deriveFont(Font.ITALIC));
                     c.setForeground(UIManager.getColor("Label.disabledForeground"));
                 } else {
@@ -239,17 +245,38 @@ public class FixParserPanel extends JPanel {
                     c.setForeground(table.getForeground());
                 }
 
-                if (column == 1 || column == 3) {
+                // Reset background
+                if (!isSelected) {
+                    c.setBackground(table.getBackground());
+                }
+
+                // Custom validation styling on "Value" column (index 3)
+                if (column == 3 && !isUnknown) {
+                    boolean isValid = tableModel.isValueValid(modelRow);
+                    if (!isValid) {
+                        if (!isSelected) {
+                            c.setBackground(errorBg);
+                        }
+                        c.setForeground(errorFg);
+                        ((JLabel) c).setToolTipText(tableModel.getValidationErrorMessage(modelRow));
+                    } else {
+                        ((JLabel) c).setToolTipText(value != null ? value.toString() : "");
+                    }
+                } else if (column == 1 || column == 4) {
                     ((JLabel) c).setToolTipText(value != null ? value.toString() : "");
+                } else {
+                    ((JLabel) c).setToolTipText(null);
                 }
 
                 return c;
             }
         });
 
-        resultTable.getColumnModel().getColumn(0).setPreferredWidth(60);
-        resultTable.getColumnModel().getColumn(1).setPreferredWidth(200);
-        resultTable.getColumnModel().getColumn(2).setPreferredWidth(200);
+        resultTable.getColumnModel().getColumn(0).setPreferredWidth(50);  // Tag
+        resultTable.getColumnModel().getColumn(1).setPreferredWidth(160); // Field Name
+        resultTable.getColumnModel().getColumn(2).setPreferredWidth(70);  // Type
+        resultTable.getColumnModel().getColumn(3).setPreferredWidth(450); // Value
+        resultTable.getColumnModel().getColumn(4).setPreferredWidth(150); // Enum Description
 
         add(new JBScrollPane(resultTable), BorderLayout.CENTER);
     }
@@ -332,9 +359,7 @@ public class FixParserPanel extends JPanel {
             lastDetectedVersion = null;
             lastDetectedDelimiter = null;
             // Clear table if input is empty
-            ApplicationManager.getApplication().invokeLater(() -> {
-                tableModel.setData(List.of(), Map.of());
-            });
+            ApplicationManager.getApplication().invokeLater(() -> tableModel.setData(List.of(), Map.of()));
             return;
         }
 
@@ -358,9 +383,7 @@ public class FixParserPanel extends JPanel {
                     : null;
 
             // Update UI back on EDT
-            ApplicationManager.getApplication().invokeLater(() -> {
-                tableModel.setData(pairs, dict);
-            });
+            ApplicationManager.getApplication().invokeLater(() -> tableModel.setData(pairs, dict));
         });
     }
 
