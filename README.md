@@ -13,10 +13,11 @@ dictionaries.
 ## Features
 
 - 📋 **Paste any FIX message** into the multi-line input area
-- 🔀 **Choose delimiter** — Pipe `|`, Caret `^`, Tilde `~`, SOH (`\x01`), or any custom character
+- 🔀 **Auto-Delimiter Conversion** — Changing the selected delimiter (Pipe `|`, Caret `^`, Tilde `~`, SOH `\x01`, or a custom character) automatically converts the message in the input text area to use the new separator.
+- 🔄 **Recalculate Checksum & Length** — A button to automatically recalculate the `BodyLength` (Tag 9) and `CheckSum` (Tag 10) in the input message when table values are edited.
 - 📖 **Select from bundled dictionaries** — FIX 4.0 through FIX 5.0 SP2 (including `.modified` variants)
 - 📂 **Load a custom dictionary** XML file via the file browser
-- 📊 **Parsed result table** — Tag number · Field name · Value · Enum description
+- 📊 **Parsed result table** — Tag number · Field name · Value · Enum description (values are fully editable)
 - ⚡ Re-parse instantly with `Ctrl+Enter`
 
 ---
@@ -68,7 +69,7 @@ In IntelliJ IDEA:
 
 ## Usage
 
-1. Open the **FIX Parser** tool window (`View → Tool Windows → FIX Parser`)
+1. Open the **FIX Message Parser** tool window (`View → Tool Windows → FIX Message Parser`)
 2. Paste your raw FIX message into the input area:
    ```
    8=FIX.4.1|9=857|35=U4|34=386|49=EMX|52=20260320-08:58:58|56=ZIN70|10=009|

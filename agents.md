@@ -85,7 +85,7 @@ Dictionaries follow the **QuickFIX/J schema**:
 
 ### Tool Window: FIX Message Parser
 
-The plugin exposes a **Tool Window** (docked panel) titled **"FIX Parser"**.
+The plugin exposes a **Tool Window** (docked panel) titled **"FIX Message Parser"**.
 
 #### Layout (top-to-bottom)
 

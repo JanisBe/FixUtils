@@ -12,7 +12,7 @@ public class OpenFixParserAction extends AnAction {
     public void actionPerformed(@NotNull AnActionEvent e) {
         Project project = e.getProject();
         if (project == null) return;
-        ToolWindow tw = ToolWindowManager.getInstance(project).getToolWindow("FIX Parser");
+        ToolWindow tw = ToolWindowManager.getInstance(project).getToolWindow("FIX Message Parser");
         if (tw != null) {
             tw.activate(null);
         }

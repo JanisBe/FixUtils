@@ -20,11 +20,15 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
+import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class FixParserPanel extends JPanel {
     private final transient Project project;
@@ -132,15 +136,17 @@ public class FixParserPanel extends JPanel {
         customRadio.addChangeListener(e -> {
             boolean isCustom = customRadio.isSelected();
             customSeparatorField.setEnabled(isCustom);
-            if (isCustom) {
-                triggerAutoParse();
-            } else {
-                performParse();
-            }
         });
 
         // Add action listener to all radio buttons for instant parsing on change
-        java.awt.event.ActionListener radioListener = e -> performParse();
+        ActionListener radioListener = e -> {
+            if (!isUpdatingUi) {
+                if (tableModel != null && !tableModel.getData().isEmpty()) {
+                    rebuildMessageFromTable();
+                }
+                performParse();
+            }
+        };
         pipeRadio.addActionListener(radioListener);
         caretRadio.addActionListener(radioListener);
         tildeRadio.addActionListener(radioListener);
@@ -148,19 +154,28 @@ public class FixParserPanel extends JPanel {
         customRadio.addActionListener(radioListener);
 
         customSeparatorField.getDocument().addDocumentListener(new DocumentListener() {
+            private void handleCustomSeparatorChange() {
+                if (!isUpdatingUi) {
+                    if (tableModel != null && !tableModel.getData().isEmpty()) {
+                        rebuildMessageFromTable();
+                    }
+                    triggerAutoParse();
+                }
+            }
+
             @Override
             public void insertUpdate(DocumentEvent e) {
-                triggerAutoParse();
+                handleCustomSeparatorChange();
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                triggerAutoParse();
+                handleCustomSeparatorChange();
             }
 
             @Override
             public void changedUpdate(DocumentEvent e) {
-                triggerAutoParse();
+                handleCustomSeparatorChange();
             }
         });
 
@@ -196,10 +211,15 @@ public class FixParserPanel extends JPanel {
         JButton parseButton = new JButton("Parse");
         parseButton.addActionListener(e -> performParse());
 
+        JButton recalculateButton = new JButton("Recalculate Checksum & Length");
+        recalculateButton.addActionListener(e -> performRecalculate());
+
         dictPanel.add(dictionaryCombo);
         dictPanel.add(browseButton);
         dictPanel.add(Box.createHorizontalStrut(20));
         dictPanel.add(parseButton);
+        dictPanel.add(Box.createHorizontalStrut(10));
+        dictPanel.add(recalculateButton);
         dictPanel.add(Box.createHorizontalStrut(10));
         dictPanel.add(dictionaryStatusLabel);
 
@@ -424,8 +444,8 @@ public class FixParserPanel extends JPanel {
     private String identifyDelimiter(String message) {
         // Find delimiter: check what's between BeginString and BodyLength
         // Standard pattern: 8=FIX.X.Y<DELIM>9=
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^8=FIX\\.[0-9a-zA-Z.]+(\\D)9=");
-        java.util.regex.Matcher matcher = pattern.matcher(message);
+        Pattern pattern = Pattern.compile("^8=FIX\\.[0-9a-zA-Z.]+(\\D)9=");
+        Matcher matcher = pattern.matcher(message);
         if (matcher.find()) {
             return matcher.group(1);
         }
@@ -480,5 +500,70 @@ public class FixParserPanel extends JPanel {
         if (sohRadio.isSelected()) return SOH;
         if (customRadio.isSelected()) return customSeparatorField.getText();
         return PIPE; // fallback
+    }
+
+    private void performRecalculate() {
+        List<TagValuePair> currentPairs = tableModel.getData();
+        if (currentPairs == null || currentPairs.isEmpty()) {
+            return;
+        }
+
+        // Find index of Tag 9 (BodyLength) and Tag 10 (CheckSum)
+        int tag9Index = -1;
+        int tag10Index = -1;
+        for (int i = 0; i < currentPairs.size(); i++) {
+            int tag = currentPairs.get(i).tag();
+            if (tag == 9) {
+                tag9Index = i;
+            } else if (tag == 10) {
+                tag10Index = i;
+            }
+        }
+
+        String delimiter = getSelectedDelimiter();
+        if (delimiter == null || delimiter.isEmpty()) {
+            return;
+        }
+
+        // 1. Recalculate BodyLength (Tag 9)
+        int startIndex = tag9Index != -1 ? tag9Index + 1 : 0;
+        int endIndex = tag10Index != -1 ? tag10Index : currentPairs.size();
+
+        int bodyLength = 0;
+        for (int i = startIndex; i < endIndex; i++) {
+            TagValuePair pair = currentPairs.get(i);
+            bodyLength += String.valueOf(pair.tag()).length() + 1 + pair.value().length() + delimiter.length();
+        }
+
+        List<TagValuePair> newPairs = new ArrayList<>(currentPairs);
+
+        if (tag9Index != -1) {
+            newPairs.set(tag9Index, new TagValuePair(9, String.valueOf(bodyLength)));
+        }
+
+        // 2. Recalculate CheckSum (Tag 10)
+        int sum = 0;
+        int checkSumLimit = tag10Index != -1 ? tag10Index : newPairs.size();
+        for (int i = 0; i < checkSumLimit; i++) {
+            TagValuePair pair = newPairs.get(i);
+            String fieldString = pair.tag() + "=" + pair.value() + delimiter;
+            for (int j = 0; j < fieldString.length(); j++) {
+                sum += fieldString.charAt(j);
+            }
+        }
+        int checksumVal = sum % 256;
+        String checksumStr = String.format("%03d", checksumVal);
+
+        if (tag10Index != -1) {
+            newPairs.set(tag10Index, new TagValuePair(10, checksumStr));
+        }
+
+        String dictName = (String) dictionaryCombo.getSelectedItem();
+        Map<Integer, FixFieldDescriptor> dict = dictName != null
+                ? dictionaryService.getDictionary(dictName)
+                : null;
+
+        tableModel.setData(newPairs, dict);
+        rebuildMessageFromTable();
     }
 }
