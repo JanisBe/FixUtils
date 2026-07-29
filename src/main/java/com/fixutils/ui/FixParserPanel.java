@@ -20,9 +20,8 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
-import java.awt.event.ActionListener;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.*;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,12 +43,18 @@ public class FixParserPanel extends JPanel {
     private JTextField customSeparatorField;
     private JComboBox<String> dictionaryCombo;
     private JLabel dictionaryStatusLabel;
+    private JTextField searchField;
+    private JBTable resultTable;
     
     private FixTableModel tableModel;
     private final transient Timer parseTimer;
     private boolean isUpdatingUi = false;
     private String lastDetectedVersion = null;
     private String lastDetectedDelimiter = null;
+
+    private String lastSearchText = "";
+    private int lastFoundRow = -1;
+    private int lastFoundCol = -1;
 
     private static final String SOH = "\u0001";
     private static final String PIPE = "|";
@@ -69,7 +74,6 @@ public class FixParserPanel extends JPanel {
     }
 
     private void initUi() {
-        JBTable resultTable;
         // --- NORTH: Input and Controls ---
         JPanel topPanel = new JPanel(new BorderLayout());
 
@@ -222,6 +226,17 @@ public class FixParserPanel extends JPanel {
         dictPanel.add(recalculateButton);
         dictPanel.add(Box.createHorizontalStrut(10));
         dictPanel.add(dictionaryStatusLabel);
+        dictPanel.add(Box.createHorizontalStrut(20));
+        dictPanel.add(new JLabel("Search: "));
+
+        searchField = new JTextField(12);
+        searchField.setToolTipText("Search by Tag number, Field Name, or Value");
+        searchField.addActionListener(e -> performFindNext());
+        dictPanel.add(searchField);
+
+        JButton findButton = new JButton("Find in message");
+        findButton.addActionListener(e -> performFindNext());
+        dictPanel.add(findButton);
 
         controlsPanel.add(dictPanel);
 
@@ -232,6 +247,29 @@ public class FixParserPanel extends JPanel {
         tableModel = new FixTableModel();
         tableModel.setValueUpdateListener(this::rebuildMessageFromTable);
         resultTable = new JBTable(tableModel);
+        resultTable.setCellSelectionEnabled(true);
+
+        AbstractAction copyCellAction = new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int row = resultTable.getSelectedRow();
+                int col = resultTable.getSelectedColumn();
+                if (row != -1 && col != -1) {
+                    Object value = resultTable.getValueAt(row, col);
+                    if (value != null) {
+                        StringSelection selection = new StringSelection(value.toString());
+                        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+                    }
+                }
+            }
+        };
+
+        KeyStroke copyKS = KeyStroke.getKeyStroke(KeyEvent.VK_C, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
+        KeyStroke ctrlCKS = KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK);
+        resultTable.getInputMap(JComponent.WHEN_FOCUSED).put(copyKS, "copyCell");
+        resultTable.getInputMap(JComponent.WHEN_FOCUSED).put(ctrlCKS, "copyCell");
+        resultTable.getActionMap().put("copyCell", copyCellAction);
+        resultTable.getActionMap().put("copy", copyCellAction);
 
         // Setup table sorting
         TableRowSorter<FixTableModel> sorter = new TableRowSorter<>(tableModel);
@@ -299,6 +337,66 @@ public class FixParserPanel extends JPanel {
         resultTable.getColumnModel().getColumn(4).setPreferredWidth(150); // Enum Description
 
         add(new JBScrollPane(resultTable), BorderLayout.CENTER);
+    }
+
+    private void performFindNext() {
+        if (resultTable == null || searchField == null) {
+            return;
+        }
+        String query = searchField.getText();
+        if (query == null || query.trim().isEmpty()) {
+            searchField.setForeground(UIManager.getColor("TextField.foreground"));
+            return;
+        }
+        String textToFind = query.trim().toLowerCase();
+
+        int rowCount = resultTable.getRowCount();
+        int colCount = resultTable.getColumnCount();
+        if (rowCount == 0 || colCount == 0) {
+            return;
+        }
+
+        if (!textToFind.equals(lastSearchText)) {
+            lastFoundRow = -1;
+            lastFoundCol = -1;
+            lastSearchText = textToFind;
+        }
+
+        int startRow = Math.max(lastFoundRow, 0);
+        int startCol = lastFoundCol < 0 ? -1 : lastFoundCol;
+
+        int currentCell = startRow * colCount + startCol + 1;
+        int totalCells = rowCount * colCount;
+
+        boolean found = false;
+        for (int i = 0; i < totalCells; i++) {
+            int cellIndex = (currentCell + i) % totalCells;
+            int r = cellIndex / colCount;
+            int c = cellIndex % colCount;
+
+            Object val = resultTable.getValueAt(r, c);
+            String valStr = val != null ? val.toString() : "";
+            if (valStr.toLowerCase().contains(textToFind)) {
+                lastFoundRow = r;
+                lastFoundCol = c;
+
+                searchField.setForeground(UIManager.getColor("TextField.foreground"));
+
+                // Select cell and scroll to view
+                resultTable.changeSelection(r, c, false, false);
+                Rectangle cellRect = resultTable.getCellRect(r, c, true);
+                if (cellRect != null) {
+                    resultTable.scrollRectToVisible(cellRect);
+                }
+                resultTable.repaint();
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            searchField.setForeground(JBColor.RED);
+        }
     }
 
     private void updateDictionaryStatus() {
@@ -403,7 +501,12 @@ public class FixParserPanel extends JPanel {
                     : null;
 
             // Update UI back on EDT
-            ApplicationManager.getApplication().invokeLater(() -> tableModel.setData(pairs, dict));
+            ApplicationManager.getApplication().invokeLater(() -> {
+                tableModel.setData(pairs, dict);
+                lastSearchText = "";
+                lastFoundRow = -1;
+                lastFoundCol = -1;
+            });
         });
     }
 
@@ -451,11 +554,9 @@ public class FixParserPanel extends JPanel {
         }
 
         // Fallback: check most common delimiters
-        if (message.contains(SOH)) return SOH;
-        if (message.contains(PIPE)) return PIPE;
-        if (message.contains(CARET)) return CARET;
-        if (message.contains(TILDE)) return TILDE;
-
+        for (String delim : List.of(SOH, PIPE, CARET, TILDE)) {
+            if (message.contains(delim)) return delim;
+        }
         return null;
     }
 
@@ -469,37 +570,35 @@ public class FixParserPanel extends JPanel {
     }
 
     private void updateDelimiterSelection(String delimiter) {
-        if (PIPE.equals(delimiter)) pipeRadio.setSelected(true);
-        else if (CARET.equals(delimiter)) caretRadio.setSelected(true);
-        else if (TILDE.equals(delimiter)) tildeRadio.setSelected(true);
-        else if (SOH.equals(delimiter)) sohRadio.setSelected(true);
-        else {
-            customRadio.setSelected(true);
-            customSeparatorField.setText(delimiter);
+        if (delimiter == null) return;
+        switch (delimiter) {
+            case PIPE -> pipeRadio.setSelected(true);
+            case CARET -> caretRadio.setSelected(true);
+            case TILDE -> tildeRadio.setSelected(true);
+            case SOH -> sohRadio.setSelected(true);
+            default -> {
+                customRadio.setSelected(true);
+                customSeparatorField.setText(delimiter);
+            }
         }
     }
 
     private String mapFixVersionToDict(String version) {
-        // Basic mapping logic
-        if (version.startsWith("FIX.4.0")) return "FIX40";
-        if (version.startsWith("FIX.4.1")) return "FIX41";
-        if (version.startsWith("FIX.4.2")) return "FIX42";
-        if (version.startsWith("FIX.4.3")) return "FIX43";
-        if (version.startsWith("FIX.4.4")) return "FIX44";
-        if (version.startsWith("FIX.5.0SP1")) return "FIX50SP1";
-        if (version.startsWith("FIX.5.0SP2")) return "FIX50SP2";
-        if (version.startsWith("FIX.5.0")) return "FIX50";
-        if (version.startsWith("FIXT.1.1")) return "FIXT11";
+        if (version == null) return null;
+        String clean = version.replace(".", "");
+        // Check more specific SP versions before generic FIX50
+        for (String dict : List.of("FIX50SP1", "FIX50SP2", "FIX50", "FIX40", "FIX41", "FIX42", "FIX43", "FIX44", "FIXT11")) {
+            if (clean.startsWith(dict)) return dict;
+        }
         return null;
     }
 
     private String getSelectedDelimiter() {
-        if (pipeRadio.isSelected()) return PIPE;
+        if (customRadio.isSelected()) return customSeparatorField.getText();
         if (caretRadio.isSelected()) return CARET;
         if (tildeRadio.isSelected()) return TILDE;
         if (sohRadio.isSelected()) return SOH;
-        if (customRadio.isSelected()) return customSeparatorField.getText();
-        return PIPE; // fallback
+        return PIPE;
     }
 
     private void performRecalculate() {
@@ -512,11 +611,9 @@ public class FixParserPanel extends JPanel {
         int tag9Index = -1;
         int tag10Index = -1;
         for (int i = 0; i < currentPairs.size(); i++) {
-            int tag = currentPairs.get(i).tag();
-            if (tag == 9) {
-                tag9Index = i;
-            } else if (tag == 10) {
-                tag10Index = i;
+            switch (currentPairs.get(i).tag()) {
+                case 9 -> tag9Index = i;
+                case 10 -> tag10Index = i;
             }
         }
 

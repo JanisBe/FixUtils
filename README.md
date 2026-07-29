@@ -13,6 +13,8 @@ dictionaries.
 ## Features
 
 - 📋 **Paste any FIX message** into the multi-line input area
+- 🔍 **Field Search** — Search for any field in the parsed message by tag number, field name, or value. Clicking **Find in message** (or pressing `Enter` in the search box) highlights the first match, and subsequent clicks cycle through remaining matching cells.
+- 📋 **Single-Cell Copy (`Ctrl+C`)** — Clicking any cell in the results table and pressing `Ctrl+C` (or `Cmd+C`) copies only the text of that specific cell to the clipboard rather than the entire row.
 - 🔀 **Auto-Delimiter Conversion** — Changing the selected delimiter (Pipe `|`, Caret `^`, Tilde `~`, SOH `\x01`, or a custom character) automatically converts the message in the input text area to use the new separator.
 - 🔄 **Recalculate Checksum & Length** — A button to automatically recalculate the `BodyLength` (Tag 9) and `CheckSum` (Tag 10) in the input message when table values are edited.
 - 📖 **Select from bundled dictionaries** — FIX 4.0 through FIX 5.0 SP2 (including `.modified` variants)
