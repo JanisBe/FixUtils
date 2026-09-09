@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.fixutils"
-version = "1.0.4"
+version = "1.0.5"
 
 repositories {
     mavenCentral()
@@ -28,7 +28,11 @@ intellijPlatform {
         id = "com.fixutils.fix-parser"
         name = "FIX Message Parser"
         version = project.version.toString()
-        changeNotes = "Initial release"
+        changeNotes = """
+            <ul>
+                <li>Increased custom separator field width so Dawid L can see the whole thing</li>
+            </ul>
+        """.trimIndent()
 
         ideaVersion {
             sinceBuild = "231"

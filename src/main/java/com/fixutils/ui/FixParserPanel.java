@@ -45,7 +45,7 @@ public class FixParserPanel extends JPanel {
     private JLabel dictionaryStatusLabel;
     private JTextField searchField;
     private JBTable resultTable;
-    
+
     private FixTableModel tableModel;
     private final transient Timer parseTimer;
     private boolean isUpdatingUi = false;
@@ -80,7 +80,8 @@ public class FixParserPanel extends JPanel {
         // Input Area
         messageInput = new JTextArea(5, 50);
         messageInput.setLineWrap(true);
-        // Hint label pseudo-implementation via tooltip for simplicity, or just let it be blank
+        // Hint label pseudo-implementation via tooltip for simplicity, or just let it
+        // be blank
         messageInput.setToolTipText("Paste FIX Message here. e.g. 8=FIX.4.1|9=857|...");
         messageInput.addKeyListener(new KeyAdapter() {
             @Override
@@ -127,7 +128,7 @@ public class FixParserPanel extends JPanel {
         tildeRadio = new JRadioButton("~ Tilde");
         sohRadio = new JRadioButton("SOH (\\x01)");
         customRadio = new JRadioButton("Custom:");
-        customSeparatorField = new JTextField(3);
+        customSeparatorField = new JTextField(5);
         customSeparatorField.setEnabled(false);
 
         ButtonGroup sepGroup = new ButtonGroup();
@@ -264,7 +265,8 @@ public class FixParserPanel extends JPanel {
             }
         };
 
-        KeyStroke copyKS = KeyStroke.getKeyStroke(KeyEvent.VK_C, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
+        KeyStroke copyKS = KeyStroke.getKeyStroke(KeyEvent.VK_C,
+                Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
         KeyStroke ctrlCKS = KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK);
         resultTable.getInputMap(JComponent.WHEN_FOCUSED).put(copyKS, "copyCell");
         resultTable.getInputMap(JComponent.WHEN_FOCUSED).put(ctrlCKS, "copyCell");
@@ -289,7 +291,8 @@ public class FixParserPanel extends JPanel {
             private final Color errorFg = new JBColor(new Color(180, 0, 0), new Color(255, 120, 120));
 
             @Override
-            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
                 Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
                 int modelRow = table.convertRowIndexToModel(row);
@@ -330,9 +333,9 @@ public class FixParserPanel extends JPanel {
             }
         });
 
-        resultTable.getColumnModel().getColumn(0).setPreferredWidth(50);  // Tag
+        resultTable.getColumnModel().getColumn(0).setPreferredWidth(50); // Tag
         resultTable.getColumnModel().getColumn(1).setPreferredWidth(160); // Field Name
-        resultTable.getColumnModel().getColumn(2).setPreferredWidth(70);  // Type
+        resultTable.getColumnModel().getColumn(2).setPreferredWidth(70); // Type
         resultTable.getColumnModel().getColumn(3).setPreferredWidth(450); // Value
         resultTable.getColumnModel().getColumn(4).setPreferredWidth(150); // Enum Description
 
@@ -400,7 +403,8 @@ public class FixParserPanel extends JPanel {
     }
 
     private void updateDictionaryStatus() {
-        if (dictionaryStatusLabel == null) return;
+        if (dictionaryStatusLabel == null)
+            return;
         String selected = (String) dictionaryCombo.getSelectedItem();
         if (selected != null && selected.endsWith(" (external)")) {
             dictionaryStatusLabel.setText("Custom dictionary active");
@@ -441,7 +445,8 @@ public class FixParserPanel extends JPanel {
                 dictionaryCombo.setSelectedItem(displayName);
                 performParse();
             } else {
-                JOptionPane.showMessageDialog(this, "Failed to load dictionary from " + file.getName(), "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Failed to load dictionary from " + file.getName(), "Error",
+                        JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -467,7 +472,8 @@ public class FixParserPanel extends JPanel {
     }
 
     public void performParse() {
-        if (isUpdatingUi) return;
+        if (isUpdatingUi)
+            return;
         if (parseTimer.isRunning()) {
             parseTimer.stop();
         }
@@ -511,7 +517,8 @@ public class FixParserPanel extends JPanel {
     }
 
     private void triggerAutoParse() {
-        if (isUpdatingUi) return;
+        if (isUpdatingUi)
+            return;
         if (parseTimer.isRunning()) {
             parseTimer.restart();
         } else {
@@ -521,7 +528,8 @@ public class FixParserPanel extends JPanel {
 
     private void autoDetectSettings(String message) {
         String detectedDelimiter = identifyDelimiter(message);
-        if (detectedDelimiter == null) return;
+        if (detectedDelimiter == null)
+            return;
 
         String fixVersion = extractFixVersion(message, detectedDelimiter);
 
@@ -555,7 +563,8 @@ public class FixParserPanel extends JPanel {
 
         // Fallback: check most common delimiters
         for (String delim : List.of(SOH, PIPE, CARET, TILDE)) {
-            if (message.contains(delim)) return delim;
+            if (message.contains(delim))
+                return delim;
         }
         return null;
     }
@@ -570,7 +579,8 @@ public class FixParserPanel extends JPanel {
     }
 
     private void updateDelimiterSelection(String delimiter) {
-        if (delimiter == null) return;
+        if (delimiter == null)
+            return;
         switch (delimiter) {
             case PIPE -> pipeRadio.setSelected(true);
             case CARET -> caretRadio.setSelected(true);
@@ -584,20 +594,27 @@ public class FixParserPanel extends JPanel {
     }
 
     private String mapFixVersionToDict(String version) {
-        if (version == null) return null;
+        if (version == null)
+            return null;
         String clean = version.replace(".", "");
         // Check more specific SP versions before generic FIX50
-        for (String dict : List.of("FIX50SP1", "FIX50SP2", "FIX50", "FIX40", "FIX41", "FIX42", "FIX43", "FIX44", "FIXT11")) {
-            if (clean.startsWith(dict)) return dict;
+        for (String dict : List.of("FIX50SP1", "FIX50SP2", "FIX50", "FIX40", "FIX41", "FIX42", "FIX43", "FIX44",
+                "FIXT11")) {
+            if (clean.startsWith(dict))
+                return dict;
         }
         return null;
     }
 
     private String getSelectedDelimiter() {
-        if (customRadio.isSelected()) return customSeparatorField.getText();
-        if (caretRadio.isSelected()) return CARET;
-        if (tildeRadio.isSelected()) return TILDE;
-        if (sohRadio.isSelected()) return SOH;
+        if (customRadio.isSelected())
+            return customSeparatorField.getText();
+        if (caretRadio.isSelected())
+            return CARET;
+        if (tildeRadio.isSelected())
+            return TILDE;
+        if (sohRadio.isSelected())
+            return SOH;
         return PIPE;
     }
 
