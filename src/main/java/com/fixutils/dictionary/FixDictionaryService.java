@@ -5,14 +5,17 @@ import com.intellij.openapi.diagnostic.Logger;
 
 import java.io.File;
 import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service(Service.Level.APP)
 public final class FixDictionaryService {
     private static final Logger LOG = Logger.getInstance(FixDictionaryService.class);
 
-    private final Map<String, Map<Integer, FixFieldDescriptor>> loadedDictionaries = new ConcurrentHashMap<>();
+    private final Map<String, FixDictionaryData> loadedDictionaries = new ConcurrentHashMap<>();
     
     private static final String[] BUNDLED = {
         "FIX40.xml", "FIX41.xml", "FIX42.xml", "FIX43.xml",
@@ -27,8 +30,8 @@ public final class FixDictionaryService {
             String name = stripExtension(file);
             try (InputStream is = getClass().getResourceAsStream("/Dictionaries/" + file)) {
                 if (is != null) {
-                    Map<Integer, FixFieldDescriptor> fields = FixDictionaryLoader.load(is);
-                    loadedDictionaries.put(name, fields);
+                    FixDictionaryData data = FixDictionaryLoader.loadData(is);
+                    loadedDictionaries.put(name, data);
                 } else {
                     LOG.warn("Could not find bundled dictionary: " + file);
                 }
@@ -45,13 +48,18 @@ public final class FixDictionaryService {
     }
 
     public Map<Integer, FixFieldDescriptor> getDictionary(String name) {
-        return loadedDictionaries.getOrDefault(name, Collections.emptyMap());
+        FixDictionaryData data = loadedDictionaries.get(name);
+        return data != null ? data.fields() : Collections.emptyMap();
+    }
+
+    public FixDictionaryData getDictionaryData(String name) {
+        return loadedDictionaries.get(name);
     }
 
     public boolean loadExternal(File file) {
         try {
-            Map<Integer, FixFieldDescriptor> fields = FixDictionaryLoader.load(file);
-            loadedDictionaries.put(file.getName() + " (external)", fields);
+            FixDictionaryData data = FixDictionaryLoader.loadData(file);
+            loadedDictionaries.put(file.getName() + " (external)", data);
             return true;
         } catch (Exception e) {
             LOG.error("Failed to load external dictionary: " + file.getAbsolutePath(), e);

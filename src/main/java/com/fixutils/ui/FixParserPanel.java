@@ -1,9 +1,11 @@
 package com.fixutils.ui;
 
+import com.fixutils.dictionary.FixDictionaryData;
 import com.fixutils.dictionary.FixDictionaryService;
 import com.fixutils.dictionary.FixFieldDescriptor;
 import com.fixutils.parser.FixMessageParser;
 import com.fixutils.parser.TagValuePair;
+import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileChooser.FileChooserFactory;
@@ -60,6 +62,9 @@ public class FixParserPanel extends JPanel {
     private static final String PIPE = "|";
     private static final String CARET = "^";
     private static final String TILDE = "~";
+
+    private static final String PROPERTY_LAST_DICTIONARY = "com.fixutils.lastSelectedDictionary";
+    private static final String PROPERTY_LAST_EXTERNAL_DICT_PATH = "com.fixutils.lastExternalDictionaryPath";
 
     public FixParserPanel(Project project) {
         super(new BorderLayout());
@@ -201,20 +206,26 @@ public class FixParserPanel extends JPanel {
         dictionaryStatusLabel.setFont(dictionaryStatusLabel.getFont().deriveFont(Font.BOLD));
 
         dictionaryCombo = new ComboBox<>();
-        refreshDictionaryCombo();
+        initDictionarySelection();
         dictionaryCombo.addActionListener(e -> {
             updateDictionaryStatus();
+            if (!isUpdatingUi) {
+                String selected = (String) dictionaryCombo.getSelectedItem();
+                if (selected != null) {
+                    PropertiesComponent.getInstance().setValue(PROPERTY_LAST_DICTIONARY, selected);
+                }
+            }
             performParse();
         });
-
-        // Select FIX41 by default if it exists, else index 0
-        dictionaryCombo.setSelectedItem("FIX41");
 
         JButton browseButton = new JButton("Browse for dictionary...");
         browseButton.addActionListener(e -> browseExternalDictionary());
 
         JButton parseButton = new JButton("Parse");
         parseButton.addActionListener(e -> performParse());
+
+        JButton sortButton = new JButton("Sort");
+        sortButton.addActionListener(e -> performSort());
 
         JButton recalculateButton = new JButton("Recalculate Checksum & Length");
         recalculateButton.addActionListener(e -> performRecalculate());
@@ -223,6 +234,8 @@ public class FixParserPanel extends JPanel {
         dictPanel.add(browseButton);
         dictPanel.add(Box.createHorizontalStrut(20));
         dictPanel.add(parseButton);
+        dictPanel.add(Box.createHorizontalStrut(10));
+        dictPanel.add(sortButton);
         dictPanel.add(Box.createHorizontalStrut(10));
         dictPanel.add(recalculateButton);
         dictPanel.add(Box.createHorizontalStrut(10));
@@ -250,17 +263,35 @@ public class FixParserPanel extends JPanel {
         resultTable = new JBTable(tableModel);
         resultTable.setCellSelectionEnabled(true);
 
-        AbstractAction copyCellAction = new AbstractAction() {
+        AbstractAction copyAction = new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                int row = resultTable.getSelectedRow();
-                int col = resultTable.getSelectedColumn();
-                if (row != -1 && col != -1) {
-                    Object value = resultTable.getValueAt(row, col);
-                    if (value != null) {
-                        StringSelection selection = new StringSelection(value.toString());
-                        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+                int[] selectedRows = resultTable.getSelectedRows();
+                int[] selectedCols = resultTable.getSelectedColumns();
+                if (selectedRows.length == 0 || selectedCols.length == 0) {
+                    return;
+                }
+
+                List<String> rowLines = new ArrayList<>();
+                for (int row : selectedRows) {
+                    List<String> cellValues = new ArrayList<>();
+                    boolean anySelected = false;
+                    for (int col : selectedCols) {
+                        if (resultTable.isCellSelected(row, col)) {
+                            anySelected = true;
+                            Object value = resultTable.getValueAt(row, col);
+                            cellValues.add(value != null ? value.toString() : "");
+                        }
                     }
+                    if (anySelected) {
+                        rowLines.add(String.join("\t", cellValues));
+                    }
+                }
+
+                if (!rowLines.isEmpty()) {
+                    String text = String.join(System.lineSeparator(), rowLines);
+                    StringSelection selection = new StringSelection(text);
+                    Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
                 }
             }
         };
@@ -268,10 +299,9 @@ public class FixParserPanel extends JPanel {
         KeyStroke copyKS = KeyStroke.getKeyStroke(KeyEvent.VK_C,
                 Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
         KeyStroke ctrlCKS = KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK);
-        resultTable.getInputMap(JComponent.WHEN_FOCUSED).put(copyKS, "copyCell");
-        resultTable.getInputMap(JComponent.WHEN_FOCUSED).put(ctrlCKS, "copyCell");
-        resultTable.getActionMap().put("copyCell", copyCellAction);
-        resultTable.getActionMap().put("copy", copyCellAction);
+        resultTable.getInputMap(JComponent.WHEN_FOCUSED).put(copyKS, "copy");
+        resultTable.getInputMap(JComponent.WHEN_FOCUSED).put(ctrlCKS, "copy");
+        resultTable.getActionMap().put("copy", copyAction);
 
         // Setup table sorting
         TableRowSorter<FixTableModel> sorter = new TableRowSorter<>(tableModel);
@@ -416,15 +446,41 @@ public class FixParserPanel extends JPanel {
     }
 
     private void refreshDictionaryCombo() {
-        String selected = (String) dictionaryCombo.getSelectedItem();
-        dictionaryCombo.removeAllItems();
-        List<String> dicts = dictionaryService.getDisplayNames();
-        for (String d : dicts) {
-            dictionaryCombo.addItem(d);
+        boolean prevUpdating = isUpdatingUi;
+        isUpdatingUi = true;
+        try {
+            String selected = (String) dictionaryCombo.getSelectedItem();
+            dictionaryCombo.removeAllItems();
+            List<String> dicts = dictionaryService.getDisplayNames();
+            for (String d : dicts) {
+                dictionaryCombo.addItem(d);
+            }
+            if (selected != null && dicts.contains(selected)) {
+                dictionaryCombo.setSelectedItem(selected);
+            } else if (!dicts.isEmpty()) {
+                dictionaryCombo.setSelectedIndex(0);
+            }
+            updateDictionaryStatus();
+        } finally {
+            isUpdatingUi = prevUpdating;
         }
-        if (selected != null && dicts.contains(selected)) {
-            dictionaryCombo.setSelectedItem(selected);
-        } else if (!dicts.isEmpty()) {
+    }
+
+    private void initDictionarySelection() {
+        String savedExternalPath = PropertiesComponent.getInstance().getValue(PROPERTY_LAST_EXTERNAL_DICT_PATH);
+        if (savedExternalPath != null && !savedExternalPath.isBlank()) {
+            File file = new File(savedExternalPath);
+            if (file.exists() && file.isFile()) {
+                dictionaryService.loadExternal(file);
+            }
+        }
+
+        refreshDictionaryCombo();
+
+        String savedDict = PropertiesComponent.getInstance().getValue(PROPERTY_LAST_DICTIONARY, "FIX41");
+        if (dictionaryService.getDisplayNames().contains(savedDict)) {
+            dictionaryCombo.setSelectedItem(savedDict);
+        } else if (dictionaryCombo.getItemCount() > 0) {
             dictionaryCombo.setSelectedIndex(0);
         }
         updateDictionaryStatus();
@@ -441,6 +497,8 @@ public class FixParserPanel extends JPanel {
             File file = new File(files[0].getPath());
             String displayName = file.getName() + " (external)";
             if (dictionaryService.loadExternal(file)) {
+                PropertiesComponent.getInstance().setValue(PROPERTY_LAST_EXTERNAL_DICT_PATH, file.getAbsolutePath());
+                PropertiesComponent.getInstance().setValue(PROPERTY_LAST_DICTIONARY, displayName);
                 refreshDictionaryCombo();
                 dictionaryCombo.setSelectedItem(displayName);
                 performParse();
@@ -541,9 +599,13 @@ public class FixParserPanel extends JPanel {
                 lastDetectedDelimiter = detectedDelimiter;
             }
             if (fixVersion != null && !fixVersion.equals(lastDetectedVersion)) {
-                String dictToSelect = mapFixVersionToDict(fixVersion);
-                if (dictToSelect != null) {
-                    dictionaryCombo.setSelectedItem(dictToSelect);
+                String currentDict = (String) dictionaryCombo.getSelectedItem();
+                boolean isExternal = currentDict != null && currentDict.endsWith(" (external)");
+                if (!isExternal) {
+                    String dictToSelect = mapFixVersionToDict(fixVersion);
+                    if (dictToSelect != null) {
+                        dictionaryCombo.setSelectedItem(dictToSelect);
+                    }
                 }
                 lastDetectedVersion = fixVersion;
             }
@@ -678,6 +740,44 @@ public class FixParserPanel extends JPanel {
                 : null;
 
         tableModel.setData(newPairs, dict);
+        rebuildMessageFromTable();
+    }
+
+    private void performSort() {
+        if (isUpdatingUi)
+            return;
+        if (parseTimer.isRunning()) {
+            parseTimer.stop();
+        }
+
+        String message = messageInput.getText();
+        if (message == null || message.trim().isEmpty()) {
+            return;
+        }
+
+        if (message.startsWith("8=")) {
+            autoDetectSettings(message);
+        }
+
+        String delimiter = getSelectedDelimiter();
+        if (delimiter == null || delimiter.isEmpty()) {
+            return;
+        }
+
+        List<TagValuePair> pairs = FixMessageParser.parse(message, delimiter);
+        if (pairs.isEmpty()) {
+            return;
+        }
+
+        String dictName = (String) dictionaryCombo.getSelectedItem();
+        FixDictionaryData dictData = dictName != null ? dictionaryService.getDictionaryData(dictName) : null;
+        List<TagValuePair> sortedPairs = dictData != null ? dictData.sort(pairs) : FixDictionaryData.defaultSort(pairs);
+
+        Map<Integer, FixFieldDescriptor> dict = dictName != null
+                ? dictionaryService.getDictionary(dictName)
+                : null;
+
+        tableModel.setData(sortedPairs, dict);
         rebuildMessageFromTable();
     }
 }
