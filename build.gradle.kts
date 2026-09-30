@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.fixutils"
-version = "1.0.5"
+version = "1.0.6"
 
 repositories {
     mavenCentral()
@@ -30,7 +30,9 @@ intellijPlatform {
         version = project.version.toString()
         changeNotes = """
             <ul>
-                <li>Increased custom separator field width so Dawid L can see the whole thing</li>
+                <li>Support copying multiple selected table cells to clipboard</li>
+                <li>Remember last selected dictionary across IDE restarts</li>
+                <li>Tag column numeric sorting improvements</li>
             </ul>
         """.trimIndent()
 
